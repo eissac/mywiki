@@ -1,0 +1,22 @@
+= 知识库 =
+* [[环境搭建]]
+* hadoop
+* hbase
+* nutch
+* mahout
+* 常见错误速查
+* 脚本使用
+* API
+* [[算法说明]]
+* 工具
+{{{class="brush: python"
+
+class TestHelloWorld(object):
+  """Hello world python."""
+  def __init__(self, name):
+    self.name = name
+
+  def say(self):
+    print("hello {0}".format(self.name))
+
+}}} 

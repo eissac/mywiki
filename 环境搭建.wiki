@@ -1,0 +1,352 @@
+=环境搭建=
+==安装hadoop+hbase+nutch+solr==
+===版本说明===
+
+|        | 版本号           | 下载地址 |
+| Hadoop | 1.2.1            |          |
+| Hbase  | 0.90.4           |          |
+| Nutch  | 2.2.1            |          |
+| Linux  | CentOS6.5 x86_64 |          |
+
+===Hadoop集群环境===
+
+| 主机名 | IP地址        | 功能                  |
+|--------|---------------|-----------------------|
+| master | 192.168.1.100 | Namenode/Job tracker  |
+| slave1 | 192.168.1.200 | Datanode/Task tracker |
+| slave2 | 192.168.1.201 | Datanode/Task tracker |
+
+====配置静态路由====
+[[路由器设置]]
+[[linux网络设置]]
+===Hadoop伪分布式搭建===
+
+创建用户"hadoop"
+    #useradd  -s /bin/bash -d /home/hadoop -m hadoop 
+    #set password 
+    #passwd hadoop 
+把用户hadoop添加进sudoers
+    #visudo
+找到root  ALL=(ALL)  ALL  下加入一行 hadoop  ALL=(ALL)  ALL
+    
+以hadoop身份登陆
+     #su hadoop
+     $cd ~
+新建一个目录用来存放hadoop集群数据 
+     $mkdir cluster-data
+ [[安装JDK1.7]](mahout不兼容JDK1.8)
+    $wget --no-cookies --no-check-certificate --header "Cookie: gpw_e24=http%3A%2F%2Fwww.oracle.com%2F;oraclelicense=accept-securebackup-cookie" "http://download.oracle.com/otn-pub/java/jdk/7u55-b13/jdk-7u55-linux-x64.tar.gz"
+
+下载hadoop-1.2.1
+     $wget http://www.eu.apache.org/dist/hadoop/common/hadoop-1.2.1/hadoop-1.2.1.tar.gz
+解压tar包
+     $ tar -zvxf hadoop-1.2.1.tar.gz
+安装ssh server
+     $ sudo yum install openssh-server
+创建ssh key
+     $ ssh-keygen
+创建公钥文件
+    $ cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+    $ chmod 600 ~/.ssh/authorized_keys
+    
+find the ip of local machine
+    $ ifconfig
+the ip can be found in this string:
+inet addr:192.168.1.100
+add to hosts, this line should be at the first line.
+    $ vi /etc/hosts
+    192.168.1.100 master
+add to /etc/profile
+    export JAVA_HOME=/usr/java/latest
+
+    export HADOOP_HOME=/home/hadoop/hadoop-1.2.1
+
+    export HBASE_HOME=/home/hadoop/hbase-0.90.4
+
+    export PATH= $HADOOP_HOME/bin:$HBASE_HOME/bin:$JAVA_HOME/bin:$PATH
+source it
+    $ source /etc/profile
+    create folder
+    hadoop@master:~$ mkdir /home/hadoop/data
+    edit /home/hadoop/hadoop-1.2.1/conf/hdfs-site.xml as below
+    <?xml version="1.0"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+    <!-- Put site-specific property overrides in this file. -->
+
+    <configuration>
+
+    <property>
+      <name>dfs.replication</name>
+      <value>1</value>
+      <description>Default block replication.
+      The actual number of replications can be specified when the file is created.
+      The default is used if replication is not specified in create time.
+      </description>
+    </property>
+
+    <property>
+     <name>dfs.permissions</name>
+     <value>false</value>
+    </property>
+
+    </configuration>
+    edit /home/hadoop/hadoop-1.2.1/conf/mapred-site.xml as below
+    <?xml version="1.0"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+    <!-- Put site-specific property overrides in this file. -->
+
+    <configuration>
+
+    <property>
+      <name>mapred.job.tracker</name>
+      <value>master:9002</value>
+      <description>The host and port that the MapReduce job tracker runs
+      at. If "local", then jobs are run in-process as a single map
+      and reduce task.
+      </description>
+    </property>
+
+
+    </configuration>
+    edit /home/hadoop/hadoop-1.2.1/conf/core-site.xml as below
+    <?xml version="1.0"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+    <!-- Put site-specific property overrides in this file. -->
+
+    <configuration>
+
+    <property>
+      <name>hadoop.tmp.dir</name>
+      <value>/home/hadoop/data</value>
+      <description>A base for other temporary directories.</description>
+    </property>
+     
+    <property>
+      <name>fs.default.name</name>
+      <value>hdfs://master:9001</value>
+      <description>The name of the default file system.  A URI whose
+      scheme and authority determine the FileSystem implementation.  The
+      uri's scheme determines the config property (fs.SCHEME.impl) naming
+      the FileSystem implementation class.  The uri's authority is used to
+      determine the host, port, etc. for a filesystem.</description>
+    </property>
+
+
+    </configuration>
+    add to /home/hadoop/hadoop-1.2.1/conf/hadoop-env.sh
+    export JAVA_HOME=/usr/lib/jvm/java-6-oracle
+    add to /home/hadoop/hadoop-1.2.1/conf/slaves and masters
+    master
+    format hdoop namenode
+    [hadoop@master ~]$ hadoop namenode -format
+    start hadoop
+    [hadoop@master hadoop]$ start-all.sh 
+    check if hdoop install correctly
+    [hadoop@master hadoop]$ hadoop dfs -ls / 
+    for example, it will show the following output without error message.
+    Found 4 items
+    drwxr-xr-x   - hadoop supergroup          0 2013-08-28 14:02 /chukwa
+    drwxr-xr-x   - hadoop supergroup          0 2013-08-29 09:53 /hbase
+    drwxr-xr-x   - hadoop supergroup          0 2013-08-27 10:36 /opt
+    drwxr-xr-x   - hadoop supergroup          0 2013-09-01 15:22 /tmp
+
+Install Hadoop(fully-distributed mode)
+repeat step1-23 on slave1-3, but some steps will be different:
+
+    changet step 9 as below:
+    don't make the public key, just transfer the public key from master to each slave.
+    [hadoop@master hadoop]$ scp ~/.ssh/id_dsa.pub hadoop@slave1:/home/hadoop
+    change step 12 as below:
+    add to host
+    [hadoop@master hadoop]$ vi /etc/hosts
+    192.168.1.100 master
+    192.168.1.101 slave1
+    192.168.1.102 slave2
+    192.168.1.103 slave3
+    step 20, add to /home/hadoop/hadoop-1.2.1/conf/masters
+    master
+    add to /home/hadoop/hadoop-1.2.1/conf/slaves
+    slave1
+    slave2
+    slave3
+    step 22, start hadoop only on master
+    [hadoop@master hadoop]$ start-all.sh 
+
+
+
+Install Hbase
+
+    get hbase tar file
+    [hadoop@master ~]$ wget http://archive.apache.org/dist/hbase/hbase-0.90.4/hbase-0.90.4.tar.gz
+    untar the file
+    [hadoop@master ~]$ tar -vxf hbase-0.90.4.tar.gz
+    change /home/hadoop/hbase-0.90.4/conf/hbase-site.xml as below
+    <?xml version="1.0"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+    <!--
+    /**
+     * Copyright 2010 The Apache Software Foundation
+     *
+     * Licensed to the Apache Software Foundation (ASF) under one
+     * or more contributor license agreements.  See the NOTICE file
+     * distributed with this work for additional information
+     * regarding copyright ownership.  The ASF licenses this file
+     * to you under the Apache License, Version 2.0 (the
+     * "License"); you may not use this file except in compliance
+     * with the License.  You may obtain a copy of the License at
+     *
+     *     http://www.apache.org/licenses/LICENSE-2.0
+     *
+     * Unless required by applicable law or agreed to in writing, software
+     * distributed under the License is distributed on an "AS IS" BASIS,
+     * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     * See the License for the specific language governing permissions and
+     * limitations under the License.
+     */
+    -->
+    <configuration>
+
+      <property>
+        <name>hbase.rootdir</name>
+        <value>hdfs://master:9001/hbase</value>
+      </property>
+
+      <property>
+        <name>hbase.cluster.distributed</name>
+        <value>true</value>
+      </property>
+
+      <property>
+        <name>hbase.zookeeper.quorum</name>
+        <value>localhost</value>
+      </property>
+
+    </configuration>
+    change /home/hadoop/hbase-0.90.4/conf/regionservers as below
+    master
+    add JAVA_HOME to /home/hadoop/hbase-0.90.4/conf/hbase-env.sh
+    export JAVA_HOME=/usr/lib/jvm/java-6-oracle
+    replace with the new hadoop jar
+    [hadoop@master ~]$ rm /home/hadoop/hbase-0.90.4/lib/hadoop-core-0.20-append-r1056497.jar
+    [hadoop@master ~]$ cp /home/hadoop/hadoop-1.2.1/hadoop-core-1.2.1.jar /home/hadoop/hbase-0.90.4/lib
+    [hadoop@master ~]$ cp /home/hadoop/hadoop-1.2.1/lib/commons-collections-3.2.1.jar /home/hadoop/hbase-0.90.4/lib
+    [hadoop@master ~]$ cp /home/hadoop/hadoop-1.2.1/lib/commons-configuration-1.6.jar /home/hadoop/hbase-0.90.4/lib
+    start hbse
+    [hadoop@master ~]$ start-hbase.sh  
+    check if hbase install correctly
+    [hadoop@master ~]$ hbase shell
+    HBase Shell; enter 'help<RETURN>' for list of supported commands.
+    Type "exit<RETURN>" to leave the HBase Shell
+    Version 0.90.4, r1150278, Sun Jul 24 15:53:29 PDT 2011
+
+    hbase(main):001:0> list
+    TABLE                                          webpage                                         
+    1 row(s) in 0.5270 seconds
+
+
+Install Nutch
+
+    install ant
+    [root@master ~]# apt-get install ant
+    switch user and folder
+    [root@master ~]# su hadoop          
+    [hadoop@master root]$ cd ~
+    get nutch tar file
+    [hadoop@master ~]$ wget http://www.eu.apache.org/dist/nutch/2.2.1/apache-nutch-2.2.1-src.tar.gz
+    untar this file
+    [hadoop@master webcrawer]$ tar -vxf apache-nutch-2.2.1-src.tar.gz
+    add to /etc/profile
+    export NUTCH_HOME=/home/hadoop/webcrawer/apache-nutch-2.2.1
+    export PATH=$NUTCH_HOME/runtime/deploy/bin:$HADOOP_HOME/bin:$HBASE_HOME/bin:$JAVA_HOME/bin:$PATH
+    change /home/hadoop/webcrawer/apache-nutch-2.2.1/conf/hbase-site.xml as below
+    <?xml version="1.0"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+    <!--
+    /**
+     * Copyright 2009 The Apache Software Foundation
+     *
+     * Licensed to the Apache Software Foundation (ASF) under one
+     * or more contributor license agreements.  See the NOTICE file
+     * distributed with this work for additional information
+     * regarding copyright ownership.  The ASF licenses this file
+     * to you under the Apache License, Version 2.0 (the
+     * "License"); you may not use this file except in compliance
+     * with the License.  You may obtain a copy of the License at
+     *
+     *     http://www.apache.org/licenses/LICENSE-2.0
+     *
+     * Unless required by applicable law or agreed to in writing, software
+     * distributed under the License is distributed on an "AS IS" BASIS,
+     * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     * See the License for the specific language governing permissions and
+     * limitations under the License.
+     */
+    -->
+    <configuration>
+
+      <property>
+        <name>hbase.rootdir</name>
+        <value>hdfs://master:9001/hbase</value>
+      </property>
+
+      <property>
+        <name>hbase.cluster.distributed</name>
+        <value>true</value>
+      </property>
+
+      <property>
+        <name>hbase.zookeeper.quorum</name>
+        <value>localhost</value>
+      </property>
+
+    </configuration>
+    change /home/hadoop/webcrawer/apache-nutch-2.2.1/conf/nutch-site.xml as below
+    <?xml version="1.0"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+    <!-- Put site-specific property overrides in this file. -->
+
+    <configuration>
+
+        <property>
+            <name>storage.data.store.class</name>
+            <value>org.apache.gora.hbase.store.HBaseStore</value>
+            <description>Default class for storing data</description>
+        </property>
+        <property>
+            <name>http.agent.name</name>
+            <value>NutchCrawler</value>
+        </property>
+        <property>
+            <name>http.robots.agents</name>
+            <value>NutchCrawler,*</value>
+        </property>
+
+    </configuration>
+    Uncomment the following in the /home/hadoop/webcrawer/apache-nutch-2.2.1/ivy/ivy.xml file   
+    <dependency org="org.apache.gora" name="gora-hbase" rev="0.2"
+    conf="*->default" />
+    add to /home/hadoop/webcrawer/apache-nutch-2.2.1/conf/gora.properties file
+    gora.datastore.default=org.apache.gora.hbase.store.HBaseStore
+    go to nutch installation folder(/home/hadoop/webcrawer/apache-nutch-2.2.1) and run
+    ant clean
+    ant runtime
+    Create a directory in HDFS to upload the seed urls.
+    [hadoop@master ~]$ hadoop dfs -mkdir urls
+    Create a text file with the seed URLs for the crawl. Upload the seed URLs file to the directory created in the above step
+    [hadoop@master ~]$ hadoop dfs -put seed.txt urls
+    Issue the following command from inside the copied deploy directory in the
+    JobTracker node to inject the seed URLs to the Nutch database and to generate the
+    initial fetch list(-topN <N>  - number of top URLs to be selected, default is Long.MAX_VALUE )
+    [hadoop@master ~]$ nutch inject urls
+    [hadoop@master ~]$ nutch generate  -topN 3
+    Issue the following commands from inside the copied deploy directory in the
+    JobTracker node
+    [hadoop@master ~]$ nutch fetch -all
+    [hadoop@master ~]$ nutch parse -all
+    [hadoop@master ~]$ nutch updatedb
+    [hadoop@master ~]$ nutch generate -topN 10
+
